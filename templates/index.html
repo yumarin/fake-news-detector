@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIフェイクニュース判定ツール (Pro Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .score-bar { transition: all 0.5s ease; }
+        .score-safe { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+        .score-caution { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
+        .score-danger { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <nav class="bg-slate-900 text-white py-4 shadow-lg">
+        <div class="container mx-auto px-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center">
+                <span class="mr-2">🔍</span> AI News Judge <span class="ml-2 text-xs bg-blue-600 px-2 py-1 rounded">Pro</span>
+            </h1>
+            <div class="space-x-4 text-sm">
+                <a href="#history" class="hover:text-blue-400 transition">判定履歴</a>
+                <a href="#api-doc" class="hover:text-blue-400 transition">API仕様</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- メイン判定エリア -->
+            <div class="lg:col-span-2 space-y-8">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                    <h2 class="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                        <span class="mr-2 text-blue-600">✍️</span> 判定対象を入力
+                    </h2>
+                    <form method="POST" class="space-y-6">
+                        <textarea 
+                            name="text" 
+                            rows="10" 
+                            class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition bg-slate-50"
+                            placeholder="ニュース記事、SNSの投稿、怪しい情報をここに貼り付けてください..."
+                            required
+                        >{{ input_text }}</textarea>
+                        <button 
+                            type="submit" 
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 flex justify-center items-center"
+                        >
+                            <span class="mr-2">🚀</span> AI判定を実行する
+                        </button>
+                    </form>
+                </div>
+
+                {% if result %}
+                <!-- 判定結果 -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8 fade-in">
+                    <div class="flex items-center justify-between mb-8">
+                        <h2 class="text-2xl font-bold text-slate-800">総合信頼度判定</h2>
+                        <div class="text-4xl font-black text-blue-600">{{ result.score }}<span class="text-sm text-slate-400 ml-1">/100</span></div>
+                    </div>
+
+                    <div class="w-full bg-slate-100 rounded-full h-6 mb-10 overflow-hidden p-1 border border-slate-200">
+                        <div 
+                            class="score-bar h-full rounded-full {% if result.score >= 70 %}score-safe{% elif result.score >= 40 %}score-caution{% else %}score-danger{% endif %}"
+                            style="width: {{ result.score }}%"
+                        ></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-slate-50 p-6 rounded-xl border border-slate-100">
+                            <h3 class="text-sm font-bold text-slate-500 mb-2 uppercase tracking-wider">AI分析スコア</h3>
+                            <div class="text-2xl font-bold text-slate-800">{{ result.ai_score }}点</div>
+                            <p class="text-xs text-slate-400 mt-1">論理構成・表現の自然さを評価</p>
+                        </div>
+                        <div class="bg-slate-50 p-6 rounded-xl border border-slate-100">
+                            <h3 class="text-sm font-bold text-slate-500 mb-2 uppercase tracking-wider">ニュース類似度</h3>
+                            <div class="text-2xl font-bold text-slate-800">{{ result.news_sim * 100 }}%</div>
+                            <p class="text-xs text-slate-400 mt-1">大手ニュース媒体との一致度を評価</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-r-xl">
+                        <h3 class="font-bold text-blue-800 mb-2 flex items-center">
+                            <span class="mr-2">💡</span> AIによる詳細分析
+                        </h3>
+                        <p class="text-blue-900 leading-relaxed">{{ result.analysis }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- APIドキュメント -->
+                <div id="api-doc" class="bg-slate-900 text-slate-300 rounded-xl p-8 shadow-xl">
+                    <h2 class="text-xl font-bold text-white mb-6 flex items-center">
+                        <span class="mr-2">🔌</span> 開発者向けAPI仕様
+                    </h2>
+                    <div class="space-y-4 font-mono text-sm">
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-green-600 text-white px-2 py-0.5 rounded text-xs">POST</span>
+                            <span class="text-blue-400">/api/judge</span>
+                        </div>
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <p class="text-slate-500 mb-2">// Request Body</p>
+                            <p class="text-white">{ "text": "判定したい文章" }</p>
+                        </div>
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <p class="text-slate-500 mb-2">// Response</p>
+                            <p class="text-white">{ "status": "success", "score": 85.5, ... }</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- サイドバー：履歴 -->
+            <div class="space-y-8">
+                <div id="history" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-lg font-bold text-slate-800 mb-6 flex items-center">
+                        <span class="mr-2">🕒</span> 最近の判定履歴
+                    </h2>
+                    <div class="space-y-4">
+                        {% for h_text, h_score, h_time in history %}
+                        <div class="p-4 rounded-lg border border-slate-100 hover:bg-slate-50 transition">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-xs font-bold px-2 py-0.5 rounded {% if h_score >= 70 %}bg-green-100 text-green-700{% elif h_score >= 40 %}bg-yellow-100 text-yellow-700{% else %}bg-red-100 text-red-700{% endif %}">
+                                    {{ h_score }}点
+                                </span>
+                                <span class="text-[10px] text-slate-400">{{ h_time }}</span>
+                            </div>
+                            <p class="text-sm text-slate-600 line-clamp-2">{{ h_text }}</p>
+                        </div>
+                        {% else %}
+                        <p class="text-center text-slate-400 py-8 text-sm italic">履歴がありません</p>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg">
+                    <h3 class="font-bold mb-3 flex items-center">
+                        <span class="mr-2">ℹ️</span> 判定アルゴリズム
+                    </h3>
+                    <ul class="text-sm space-y-3 opacity-90">
+                        <li>• <b>ニュース類似度 (40%)</b>: Yahoo!/GoogleニュースのRSSフィードから最新情報を取得し、Tfidfベクトル化を用いて類似度を計算します。</li>
+                        <li>• <b>AI解析 (60%)</b>: OpenAIのLLMが文章の論理構成、バイアス、情報の信憑性を多角的に分析します。</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="container mx-auto px-4 py-12 text-center text-slate-400 text-sm">
+        <p>© 2026 AI News Judge Pro | 高校生エンジニアによる元コードをベースに構築</p>
+    </footer>
+</body>
+</html>
