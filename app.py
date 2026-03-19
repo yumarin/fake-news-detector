@@ -82,6 +82,7 @@ def index():
     result = {
         "score": 0,
         "ai_score": 0,
+        "news_sim": 0,
         "analysis": ""
     }
     input_text = ""
@@ -98,11 +99,11 @@ def index():
         ai_score, analysis = get_ai_score(input_text)
 
         result = {
-            "score": ai_score,
-            "ai_score": ai_score,
-            "analysis": analysis
-        }
-
+    "score": final_score,
+    "analysis": ai_analysis,
+    "news_sim": news_sim,   # ←これ追加
+    "ai_score": ai_score,
+            }
         cursor.execute(
             "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
             (input_text, ai_score, ai_score)
