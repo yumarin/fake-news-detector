@@ -10,3 +10,4 @@ grpcio==1.62.0
 grpcio-status==1.62.0
 
 gunicorn==22.0.0
+janome
