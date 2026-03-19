@@ -33,6 +33,15 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
+    # 🔥 使えるモデル一覧をログに出す（超重要）
+    print("=== AVAILABLE MODELS ===")
+    try:
+        for m in genai.list_models():
+            if "generateContent" in m.supported_generation_methods:
+                print(m.name)
+    except Exception as e:
+        print("Model list error:", e)
+
 # =========================
 # AI判定
 # =========================
@@ -41,7 +50,8 @@ def get_ai_score(text):
         return 0, "APIキー未設定"
 
     try:
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # 🔥 安定モデル（まずこれ使え）
+        model = genai.GenerativeModel("models/gemini-1.5-flash-002")
 
         response = model.generate_content(
             f"""
@@ -56,7 +66,6 @@ Reason: 理由
 """
         )
 
-        # 👇安全に取り出す
         if not response or not hasattr(response, "text"):
             return 0, "レスポンス取得失敗"
 
@@ -77,8 +86,8 @@ Reason: 理由
         return score, reason
 
     except Exception as e:
-        print("Gemini error:", e)  # ←ここ超重要
-        return 0, str(e)  # ←理由をそのまま返す
+        print("Gemini error:", e)
+        return 0, str(e)
 
 # =========================
 # ルート
@@ -96,11 +105,9 @@ def index():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    # 履歴取得
     cursor.execute("SELECT text, final_score, created_at FROM judgments ORDER BY id DESC LIMIT 5")
     history = cursor.fetchall()
 
-    # POST処理
     if request.method == "POST":
         input_text = request.form.get("text", "")
 
