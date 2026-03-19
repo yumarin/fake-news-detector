@@ -3,9 +3,8 @@ import sqlite3
 import os
 import google.generativeai as genai
 import feedparser
-import difflib
 
-# 日本語対応
+# ★ 日本語対応
 from janome.tokenizer import Tokenizer
 
 app = Flask(__name__)
@@ -68,21 +67,28 @@ def fetch_news():
     return articles
 
 # =========================
-# 軽量類似度（sklearn削除版）
+# 軽量類似度（sklearnなし）
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
         return 0, []
 
+    input_tokens = set(token.surface for token in t.tokenize(input_text))
+
     scores = []
+
     for a in articles:
-        ratio = difflib.SequenceMatcher(None, input_text, a["text"]).ratio()
-        scores.append(ratio)
+        article_tokens = set(token.surface for token in t.tokenize(a["text"]))
+
+        common = input_tokens & article_tokens
+        score = len(common) / max(len(input_tokens), 1)
+
+        scores.append(score)
 
     max_sim = max(scores) if scores else 0
 
     top_articles = []
-    for i in sorted(range(len(scores)), key=lambda x: scores[x], reverse=True):
+    for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True):
         if scores[i] > 0.1:
             top_articles.append({
                 "title": articles[i]["title"],
@@ -117,29 +123,22 @@ def get_ai_score_with_context(text, articles):
 【評価対象】
 {text}
 
-以下の形式で必ず答えてください：
-
-Score: 数値（0〜100）
-Reason:
-・ニュースとの一致度
-・不自然な点
-・総合判断
+形式：
+Score: 数値
+Reason: 理由
 """
-
         else:
             prompt = f"""
-以下の文章の信頼性を100点満点で評価してください。
+以下の文章の信頼性を評価してください。
 
-※一致ニュースなし
+※参考ニュースなし
 
 【評価対象】
 {text}
 
 形式：
 Score: 数値
-Reason:
-・論理性
-・不自然さ
+Reason: 理由
 """
 
         response = model.generate_content(prompt)
@@ -161,7 +160,6 @@ Reason:
         return score, reason
 
     except Exception as e:
-        print("Gemini error:", e)
         return 0, str(e)
 
 # =========================
@@ -237,7 +235,7 @@ def index():
     )
 
 # =========================
-# Render対応起動
+# 起動
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
