@@ -29,18 +29,10 @@ init_db()
 # Gemini設定
 # =========================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+MODEL_NAME = os.environ.get("GEMINI_MODEL", "models/gemini-2.5-flash")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-
-    # 🔥 使えるモデル一覧をログに出す（超重要）
-    print("=== AVAILABLE MODELS ===")
-    try:
-        for m in genai.list_models():
-            if "generateContent" in m.supported_generation_methods:
-                print(m.name)
-    except Exception as e:
-        print("Model list error:", e)
 
 # =========================
 # AI判定
@@ -50,8 +42,7 @@ def get_ai_score(text):
         return 0, "APIキー未設定"
 
     try:
-        # 🔥 安定モデル（まずこれ使え）
-        model = genai.GenerativeModel("models/gemini-1.5-flash-002")
+        model = genai.GenerativeModel(MODEL_NAME)
 
         response = model.generate_content(
             f"""
