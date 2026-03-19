@@ -7,7 +7,11 @@ import feedparser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+# ★ 日本語対応
+from janome.tokenizer import Tokenizer
+
 app = Flask(__name__)
+t = Tokenizer()
 
 # =========================
 # RSS
@@ -17,6 +21,12 @@ RSS_URLS = [
     "https://news.yahoo.co.jp/rss/topics/top-picks.xml",
     "http://feeds.bbci.co.uk/news/rss.xml"
 ]
+
+# =========================
+# 日本語分かち書き
+# =========================
+def tokenize_japanese(text):
+    return " ".join([token.surface for token in t.tokenize(text)])
 
 # =========================
 # DB初期化
@@ -48,7 +58,7 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 # =========================
-# RSS取得（リンク付き）
+# RSS取得
 # =========================
 def fetch_news():
     articles = []
@@ -56,37 +66,51 @@ def fetch_news():
     for url in RSS_URLS:
         feed = feedparser.parse(url)
         for entry in feed.entries[:10]:
+            text = (entry.title + " " + entry.get("summary", "")).replace("\n", " ")
             articles.append({
                 "title": entry.title,
                 "link": entry.link,
-                "text": (entry.title + " " + entry.get("summary", "")).replace("\n", " ")
+                "text": text
             })
 
     return articles
 
 # =========================
-# 類似度計算
+# 類似度計算（完全版）
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
         return 0, []
 
-    corpus = [input_text] + [a["text"] for a in articles]
+    # ★ 日本語分かち書き
+    input_text = tokenize_japanese(input_text)
+    texts = [tokenize_japanese(a["text"]) for a in articles]
 
-    vectorizer = TfidfVectorizer()
+    corpus = [input_text] + texts
+
+    vectorizer = TfidfVectorizer(stop_words=["の", "に", "は", "を", "が", "と"])
     tfidf = vectorizer.fit_transform(corpus)
 
     sims = cosine_similarity(tfidf[0:1], tfidf[1:])[0]
 
+    print("SIMS:", sims)
+
     max_sim = max(sims) if len(sims) > 0 else 0
 
-    top_indices = sims.argsort()[-3:][::-1]
-    top_articles = [articles[i] for i in top_indices]
+    # ★ 閾値フィルター
+    top_articles = []
+    for i in sims.argsort()[::-1]:
+        if sims[i] > 0.1:
+            top_articles.append({
+                "title": articles[i]["title"],
+                "link": articles[i]["link"],
+                "score": round(float(sims[i] * 100), 1)
+            })
 
-    return max_sim * 100, top_articles
+    return max_sim * 100, top_articles[:3]
 
 # =========================
-# AI判定（記事込み）
+# AI判定（完全版）
 # =========================
 def get_ai_score_with_context(text, articles):
     if not GEMINI_API_KEY:
@@ -95,23 +119,56 @@ def get_ai_score_with_context(text, articles):
     try:
         model = genai.GenerativeModel(MODEL_NAME)
 
-        articles_text = "\n---\n".join([a["text"] for a in articles])
+        # =========================
+        # 記事あり
+        # =========================
+        if articles:
+            articles_text = "\n---\n".join([
+                f"{a['title']} (一致度:{a['score']}%)"
+                for a in articles
+            ])
 
-        response = model.generate_content(
-            f"""
+            prompt = f"""
 以下の文章の信頼性を100点満点で評価してください。
 
-参考ニュース:
+【参考ニュース（関連性が高い順）】
 {articles_text}
 
-評価対象:
+【評価対象】
 {text}
 
-必ず以下の形式で答えてください：
-Score: 数値
-Reason: 理由
+以下の形式で必ず答えてください：
+
+Score: 数値（0〜100）
+Reason:
+・ニュースとの一致度について
+・不自然な点や怪しい点
+・総合的な判断理由
 """
-        )
+
+        # =========================
+        # 記事なし
+        # =========================
+        else:
+            prompt = f"""
+以下の文章の信頼性を100点満点で評価してください。
+
+※一致するニュースが見つかりませんでした。
+一般知識と論理的観点のみで判断してください。
+
+【評価対象】
+{text}
+
+以下の形式で必ず答えてください：
+
+Score: 数値（0〜100）
+Reason:
+・論理的に正しいか
+・不自然な点や誇張表現
+・信頼できる情報かどうかの判断理由
+"""
+
+        response = model.generate_content(prompt)
 
         content = response.text
 
@@ -124,8 +181,9 @@ Reason: 理由
                     score = float(line.split(":")[1].strip())
                 except:
                     pass
-            if "Reason:" in line:
-                reason = line.split(":", 1)[1].strip()
+
+        if "Reason:" in content:
+            reason = content.split("Reason:", 1)[1].strip()
 
         return score, reason
 
@@ -134,22 +192,32 @@ Reason: 理由
         return 0, str(e)
 
 # =========================
-# 総合判定
+# 総合判定（完成版）
 # =========================
 def final_judgement(text):
     articles = fetch_news()
+
     sim_score, top_articles = calc_similarity(text, articles)
+
+    # ★ 記事なし対策
+    if not top_articles:
+        sim_score = 0
 
     ai_score, analysis = get_ai_score_with_context(text, top_articles)
 
-    final_score = (ai_score * 0.7) + (sim_score * 0.3)
+    # ★ 重み切り替え
+    if top_articles:
+        final_score = (ai_score * 0.7) + (sim_score * 0.3)
+    else:
+        final_score = ai_score
 
     return {
         "score": round(final_score, 1),
-        "ai_score": ai_score,
+        "ai_score": round(ai_score, 1),
         "news_sim": round(sim_score, 1),
         "analysis": analysis,
-        "matched_articles": top_articles
+        "matched_articles": top_articles,
+        "has_articles": bool(top_articles)
     }
 
 # =========================
@@ -162,7 +230,8 @@ def index():
         "ai_score": 0,
         "news_sim": 0,
         "analysis": "",
-        "matched_articles": []
+        "matched_articles": [],
+        "has_articles": False
     }
 
     input_text = ""
