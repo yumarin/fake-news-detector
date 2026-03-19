@@ -41,7 +41,7 @@ def get_ai_score(text):
         return 0, "APIキー未設定"
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         response = model.generate_content(
             f"""
