@@ -1,0 +1,103 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0f172a;
+  color: #e5e7eb;
+  margin: 0;
+}
+
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* 入力 */
+textarea {
+  width: 100%;
+  height: 120px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  background: #1e293b;
+  color: white;
+  font-size: 16px;
+}
+
+/* ボタン */
+button {
+  margin-top: 10px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  transform: scale(1.02);
+  opacity: 0.9;
+}
+
+/* 結果カード */
+.result-box {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: #1e293b;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+/* スコア */
+.score {
+  font-size: 64px;
+  font-weight: bold;
+  text-align: center;
+}
+
+/* 判定カラー */
+.high { color: #22c55e; }
+.mid  { color: #f59e0b; }
+.low  { color: #ef4444; }
+
+/* サブ情報 */
+.sub-info {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+/* 記事リスト */
+.article {
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #0f172a;
+}
+
+.article a {
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.article a:hover {
+  text-decoration: underline;
+}
+
+/* 分析テキスト */
+.analysis {
+  margin-top: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
