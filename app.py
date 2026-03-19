@@ -1,8 +1,13 @@
 from flask import Flask, render_template, request
 import sqlite3
+import os
+import google.generativeai as genai
 
 app = Flask(__name__)
 
+# =========================
+# DB初期化
+# =========================
 def init_db():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -11,6 +16,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         text TEXT,
         final_score REAL,
+        ai_score REAL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -19,32 +25,87 @@ def init_db():
 
 init_db()
 
+# =========================
+# Gemini設定
+# =========================
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+# =========================
+# AI判定
+# =========================
+def get_ai_score(text):
+    if not GEMINI_API_KEY:
+        return 0, "APIキー未設定"
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        response = model.generate_content(f"""
+        以下の文章の信頼性を100点満点で評価してください。
+        必ず以下の形式で答えてください：
+
+        Score: 数値
+        Reason: 理由
+
+        文章:
+        {text}
+        """)
+
+        content = response.text
+
+        score = 0
+        reason = "解析失敗"
+
+        for line in content.split("\n"):
+            if "Score:" in line:
+                try:
+                    score = float(line.split(":")[1].strip())
+                except:
+                    pass
+            if "Reason:" in line:
+                reason = line.split(":", 1)[1].strip()
+
+        return score, reason
+
+    except Exception as e:
+        print("Gemini error:", e)
+        return 0, "AIエラー"
+
+# =========================
+# ルート
+# =========================
 @app.route("/", methods=["GET", "POST"])
 def index():
-    result = None
+    result = {
+        "score": 0,
+        "ai_score": 0,
+        "analysis": ""
+    }
     input_text = ""
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    # 履歴取得
     cursor.execute("SELECT text, final_score, created_at FROM judgments ORDER BY id DESC LIMIT 5")
     history = cursor.fetchall()
 
     if request.method == "POST":
         input_text = request.form["text"]
 
-        # ←ここは絶対壊れない固定値
+        ai_score, analysis = get_ai_score(input_text)
+
         result = {
-            "score": 50,
-            "ai_score": 50,
-            "news_sim": 0.5,
-            "analysis": "テスト分析（正常動作）"
+            "score": ai_score,
+            "ai_score": ai_score,
+            "analysis": analysis
         }
 
         cursor.execute(
-            "INSERT INTO judgments (text, final_score) VALUES (?, ?)",
-            (input_text, result["score"])
+            "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
+            (input_text, ai_score, ai_score)
         )
         conn.commit()
 
