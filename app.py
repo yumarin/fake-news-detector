@@ -3,11 +3,9 @@ import sqlite3
 import os
 import google.generativeai as genai
 import feedparser
+import difflib
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-# ★ 日本語対応
+# 日本語対応
 from janome.tokenizer import Tokenizer
 
 app = Flask(__name__)
@@ -21,12 +19,6 @@ RSS_URLS = [
     "https://news.yahoo.co.jp/rss/topics/top-picks.xml",
     "http://feeds.bbci.co.uk/news/rss.xml"
 ]
-
-# =========================
-# 日本語分かち書き
-# =========================
-def tokenize_japanese(text):
-    return " ".join([token.surface for token in t.tokenize(text)])
 
 # =========================
 # DB初期化
@@ -76,41 +68,32 @@ def fetch_news():
     return articles
 
 # =========================
-# 類似度計算（完全版）
+# 軽量類似度（sklearn削除版）
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
         return 0, []
 
-    # ★ 日本語分かち書き
-    input_text = tokenize_japanese(input_text)
-    texts = [tokenize_japanese(a["text"]) for a in articles]
+    scores = []
+    for a in articles:
+        ratio = difflib.SequenceMatcher(None, input_text, a["text"]).ratio()
+        scores.append(ratio)
 
-    corpus = [input_text] + texts
+    max_sim = max(scores) if scores else 0
 
-    vectorizer = TfidfVectorizer(stop_words=["の", "に", "は", "を", "が", "と"])
-    tfidf = vectorizer.fit_transform(corpus)
-
-    sims = cosine_similarity(tfidf[0:1], tfidf[1:])[0]
-
-    print("SIMS:", sims)
-
-    max_sim = max(sims) if len(sims) > 0 else 0
-
-    # ★ 閾値フィルター
     top_articles = []
-    for i in sims.argsort()[::-1]:
-        if sims[i] > 0.1:
+    for i in sorted(range(len(scores)), key=lambda x: scores[x], reverse=True):
+        if scores[i] > 0.1:
             top_articles.append({
                 "title": articles[i]["title"],
                 "link": articles[i]["link"],
-                "score": round(float(sims[i] * 100), 1)
+                "score": round(scores[i] * 100, 1)
             })
 
     return max_sim * 100, top_articles[:3]
 
 # =========================
-# AI判定（完全版）
+# AI判定
 # =========================
 def get_ai_score_with_context(text, articles):
     if not GEMINI_API_KEY:
@@ -119,9 +102,6 @@ def get_ai_score_with_context(text, articles):
     try:
         model = genai.GenerativeModel(MODEL_NAME)
 
-        # =========================
-        # 記事あり
-        # =========================
         if articles:
             articles_text = "\n---\n".join([
                 f"{a['title']} (一致度:{a['score']}%)"
@@ -131,7 +111,7 @@ def get_ai_score_with_context(text, articles):
             prompt = f"""
 以下の文章の信頼性を100点満点で評価してください。
 
-【参考ニュース（関連性が高い順）】
+【参考ニュース】
 {articles_text}
 
 【評価対象】
@@ -141,35 +121,28 @@ def get_ai_score_with_context(text, articles):
 
 Score: 数値（0〜100）
 Reason:
-・ニュースとの一致度について
-・不自然な点や怪しい点
-・総合的な判断理由
+・ニュースとの一致度
+・不自然な点
+・総合判断
 """
 
-        # =========================
-        # 記事なし
-        # =========================
         else:
             prompt = f"""
 以下の文章の信頼性を100点満点で評価してください。
 
-※一致するニュースが見つかりませんでした。
-一般知識と論理的観点のみで判断してください。
+※一致ニュースなし
 
 【評価対象】
 {text}
 
-以下の形式で必ず答えてください：
-
-Score: 数値（0〜100）
+形式：
+Score: 数値
 Reason:
-・論理的に正しいか
-・不自然な点や誇張表現
-・信頼できる情報かどうかの判断理由
+・論理性
+・不自然さ
 """
 
         response = model.generate_content(prompt)
-
         content = response.text
 
         score = 0
@@ -192,20 +165,18 @@ Reason:
         return 0, str(e)
 
 # =========================
-# 総合判定（完成版）
+# 総合判定
 # =========================
 def final_judgement(text):
     articles = fetch_news()
 
     sim_score, top_articles = calc_similarity(text, articles)
 
-    # ★ 記事なし対策
     if not top_articles:
         sim_score = 0
 
     ai_score, analysis = get_ai_score_with_context(text, top_articles)
 
-    # ★ 重み切り替え
     if top_articles:
         final_score = (ai_score * 0.7) + (sim_score * 0.3)
     else:
@@ -266,7 +237,8 @@ def index():
     )
 
 # =========================
-# 起動
+# Render対応起動
 # =========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
