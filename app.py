@@ -43,7 +43,8 @@ def get_ai_score(text):
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
 
-        response = model.generate_content(f"""
+        response = model.generate_content(
+            f"""
 以下の文章の信頼性を100点満点で評価してください。
 必ず以下の形式で答えてください：
 
@@ -52,7 +53,12 @@ Reason: 理由
 
 文章:
 {text}
-""")
+"""
+        )
+
+        # 👇安全に取り出す
+        if not response or not hasattr(response, "text"):
+            return 0, "レスポンス取得失敗"
 
         content = response.text
 
@@ -71,8 +77,8 @@ Reason: 理由
         return score, reason
 
     except Exception as e:
-        print("Gemini error:", e)
-        return 0, "AIエラー"
+        print("Gemini error:", e)  # ←ここ超重要
+        return 0, str(e)  # ←理由をそのまま返す
 
 # =========================
 # ルート
