@@ -2,93 +2,74 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIフェイクニュース判定ツール</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>ニュース真偽判定</title>
     <style>
-        .score-bar { transition: all 0.5s ease; }
-        .score-safe { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
-        .score-caution { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
-        .score-danger { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f5f5f5;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            font-size: 16px;
+            padding: 10px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+        }
+        .articles {
+            margin-top: 15px;
+        }
+        .articles a {
+            display: block;
+            margin-bottom: 5px;
+            color: blue;
+            text-decoration: none;
+        }
+        .articles a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen">
+<body>
 
-<div class="container mx-auto px-4 py-8">
+<h1>ニュース真偽判定（β2.0）</h1>
 
-    <!-- 入力 -->
-    <div class="bg-white p-6 rounded-xl shadow mb-6">
-        <h1 class="text-xl font-bold mb-4">AIニュース判定</h1>
+<form method="POST">
+    <textarea name="text" placeholder="ここにニュース本文を貼り付け"></textarea><br>
+    <button type="submit">判定</button>
+</form>
 
-        <form method="POST">
-            <textarea name="text" rows="6"
-                class="w-full border p-3 rounded mb-4"
-                placeholder="文章を入力">{{ input_text }}</textarea>
+{% if result %}
+<div class="result">
+    <h2>判定結果</h2>
+    <p><strong>総合スコア:</strong> {{ result.final_score }}</p>
+    <p><strong>AIスコア:</strong> {{ result.ai_score }}</p>
+    <p><strong>RSS一致度:</strong> {{ result.rss_score }}</p>
 
-            <button class="bg-blue-600 text-white px-4 py-2 rounded w-full">
-                判定する
-            </button>
-        </form>
-    </div>
-
-    {% if result %}
-    <!-- 結果 -->
-    <div class="bg-white p-6 rounded-xl shadow mb-6">
-        <h2 class="text-lg font-bold mb-4">判定結果</h2>
-
-        <div class="text-3xl font-bold mb-4">
-            {{ result.score if result and result.score is not none else 0 }}/100
-        </div>
-
-        <!-- バー -->
-        <div class="w-full bg-gray-200 h-5 rounded mb-6">
-            <div class="score-bar h-5 rounded
-                {% if result.score >= 70 %}score-safe
-                {% elif result.score >= 40 %}score-caution
-                {% else %}score-danger
-                {% endif %}"
-                style="width: {{ result.score if result else 0 }}%">
-            </div>
-        </div>
-
-        <!-- 詳細 -->
-        <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-                <p class="text-sm text-gray-500">AIスコア</p>
-                <p class="text-xl font-bold">
-                    {{ result.ai_score if result and result.ai_score is not none else 0 }}
-                </p>
-            </div>
-            <div>
-                <p class="text-sm text-gray-500">ニュース類似度</p>
-                <p class="text-xl font-bold">
-                    {{ (result.news_sim * 100) if result and result.news_sim is not none else 0 }}%
-                </p>
-            </div>
-        </div>
-
-        <div class="bg-blue-100 p-4 rounded">
-            {{ result.analysis if result else "" }}
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- 履歴 -->
-    <div class="bg-white p-6 rounded-xl shadow">
-        <h2 class="text-lg font-bold mb-4">履歴</h2>
-
-        {% for text, score, time in history %}
-        <div class="border-b py-2">
-            <div class="text-sm text-gray-500">{{ time }}</div>
-            <div class="font-bold">{{ score }}点</div>
-            <div class="text-sm">{{ text }}</div>
-        </div>
+    <div class="articles">
+        <h3>一致した記事</h3>
+        {% if result.articles %}
+            {% for article in result.articles %}
+                <a href="{{ article.link }}" target="_blank">
+                    {{ article.title }}
+                </a>
+            {% endfor %}
         {% else %}
-        <p class="text-gray-400">履歴なし</p>
-        {% endfor %}
+            <p>一致する記事は見つかりませんでした</p>
+        {% endif %}
     </div>
-
 </div>
+{% endif %}
 
 </body>
 </html>
