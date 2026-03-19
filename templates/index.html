@@ -2,74 +2,86 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ニュース真偽判定</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f5f5f5;
-        }
-        textarea {
-            width: 100%;
-            height: 150px;
-            font-size: 16px;
-            padding: 10px;
-        }
-        button {
-            margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-        }
-        .result {
-            margin-top: 20px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-        }
-        .articles {
-            margin-top: 15px;
-        }
-        .articles a {
-            display: block;
-            margin-bottom: 5px;
-            color: blue;
-            text-decoration: none;
-        }
-        .articles a:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <title>ニュース真偽チェッカーβ3.0</title>
 </head>
-<body>
+<body style="font-family:sans-serif; padding:20px;">
 
-<h1>ニュース真偽判定（β2.0）</h1>
+    <h1>ニュース真偽β3.0</h1>
 
-<form method="POST">
-    <textarea name="text" placeholder="ここにニュース本文を貼り付け"></textarea><br>
-    <button type="submit">判定</button>
-</form>
+    <!-- 入力フォーム -->
+    <form method="POST">
+        <textarea name="text" rows="5" cols="60" placeholder="検証したい文章を入力">{{ input_text }}</textarea><br><br>
+        <button type="submit">判定する</button>
+    </form>
 
-{% if result %}
-<div class="result">
-    <h2>判定結果</h2>
-    <p><strong>総合スコア:</strong> {{ result.final_score }}</p>
-    <p><strong>AIスコア:</strong> {{ result.ai_score }}</p>
-    <p><strong>RSS一致度:</strong> {{ result.rss_score }}</p>
+    <hr>
 
-    <div class="articles">
-        <h3>一致した記事</h3>
-        {% if result.articles %}
-            {% for article in result.articles %}
+    <!-- 結果 -->
+    <h2>総合スコア: {{ result.score }} 点</h2>
+
+    <!-- スコアバー -->
+    <div style="background:#ddd; width:300px; height:25px;">
+        <div style="
+            height:25px;
+            width:{{ result.score }}%;
+            color:white;
+            text-align:center;
+            background:
+            {% if result.score > 70 %}green
+            {% elif result.score > 40 %}orange
+            {% else %}red
+            {% endif %};
+        ">
+            {{ result.score }}%
+        </div>
+    </div>
+
+    <p>AIスコア: {{ result.ai_score }} / ニュース一致度: {{ result.news_sim }}</p>
+
+    <!-- 記事なし警告 -->
+    {% if not result.has_articles %}
+        <p style="color:red;">
+            ※一致するニュースは見つかりませんでした（AIによる推定）
+        </p>
+    {% endif %}
+
+    <!-- 理由 -->
+    <h3>判定理由</h3>
+    <div style="background:#f5f5f5; padding:10px; border-radius:5px;">
+        {{ result.analysis }}
+    </div>
+
+    <!-- 一致記事 -->
+    <h3>一致したニュース</h3>
+
+    {% if result.matched_articles %}
+        <ul>
+        {% for article in result.matched_articles %}
+            <li>
                 <a href="{{ article.link }}" target="_blank">
                     {{ article.title }}
                 </a>
-            {% endfor %}
-        {% else %}
-            <p>一致する記事は見つかりませんでした</p>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
+                （一致度: {{ article.score }}%）
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>一致するニュースなし</p>
+    {% endif %}
+
+    <hr>
+
+    <!-- 履歴 -->
+    <h3>最近の判定履歴</h3>
+    <ul>
+        {% for item in history %}
+            <li>
+                {{ item[0][:40] }}... 
+                → {{ item[1] }}点
+                （{{ item[2] }}）
+            </li>
+        {% endfor %}
+    </ul>
 
 </body>
 </html>
