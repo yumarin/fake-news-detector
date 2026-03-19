@@ -44,15 +44,15 @@ def get_ai_score(text):
         model = genai.GenerativeModel("gemini-1.5-flash")
 
         response = model.generate_content(f"""
-        以下の文章の信頼性を100点満点で評価してください。
-        必ず以下の形式で答えてください：
+以下の文章の信頼性を100点満点で評価してください。
+必ず以下の形式で答えてください：
 
-        Score: 数値
-        Reason: 理由
+Score: 数値
+Reason: 理由
 
-        文章:
-        {text}
-        """)
+文章:
+{text}
+""")
 
         content = response.text
 
@@ -90,26 +90,40 @@ def index():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
+    # 履歴取得
     cursor.execute("SELECT text, final_score, created_at FROM judgments ORDER BY id DESC LIMIT 5")
     history = cursor.fetchall()
 
-if request.method == "POST":
-    input_text = request.form.get("text", "")
+    # POST処理
+    if request.method == "POST":
+        input_text = request.form.get("text", "")
 
-    ai_score, analysis = get_ai_score(input_text)
+        ai_score, analysis = get_ai_score(input_text)
 
-    result = {
-        "score": ai_score,
-        "analysis": analysis,
-        "news_sim": 0,
-        "ai_score": ai_score,
-    }
+        result = {
+            "score": ai_score,
+            "analysis": analysis,
+            "news_sim": 0,
+            "ai_score": ai_score,
+        }
 
-    cursor.execute(
-        "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
-        (input_text, ai_score, ai_score)
+        cursor.execute(
+            "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
+            (input_text, ai_score, ai_score)
+        )
+        conn.commit()
+
+    conn.close()
+
+    return render_template(
+        "index.html",
+        result=result,
+        history=history,
+        input_text=input_text
     )
-    conn.commit()
 
+# =========================
+# 起動
+# =========================
 if __name__ == "__main__":
     app.run(debug=True)
