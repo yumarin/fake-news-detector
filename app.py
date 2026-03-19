@@ -93,31 +93,23 @@ def index():
     cursor.execute("SELECT text, final_score, created_at FROM judgments ORDER BY id DESC LIMIT 5")
     history = cursor.fetchall()
 
-    if request.method == "POST":
-        input_text = request.form["text"]
+if request.method == "POST":
+    input_text = request.form.get("text", "")
 
-        ai_score, analysis = get_ai_score(input_text)
+    ai_score, analysis = get_ai_score(input_text)
 
-        result = {
-    "score": final_score,
-    "analysis": ai_analysis,
-    "news_sim": news_sim,   # ←これ追加
-    "ai_score": ai_score,
-            }
-        cursor.execute(
-            "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
-            (input_text, ai_score, ai_score)
-        )
-        conn.commit()
+    result = {
+        "score": ai_score,
+        "analysis": analysis,
+        "news_sim": 0,
+        "ai_score": ai_score,
+    }
 
-    conn.close()
-
-    return render_template(
-        "index.html",
-        result=result,
-        history=history,
-        input_text=input_text
+    cursor.execute(
+        "INSERT INTO judgments (text, final_score, ai_score) VALUES (?, ?, ?)",
+        (input_text, ai_score, ai_score)
     )
+    conn.commit()
 
 if __name__ == "__main__":
     app.run(debug=True)
