@@ -3,6 +3,7 @@ import sqlite3
 import os
 import google.generativeai as genai
 import feedparser
+import re
 
 app = Flask(__name__)
 
@@ -36,7 +37,7 @@ def init_db():
 init_db()
 
 # =========================
-# Gemini設定（1回だけ）
+# Gemini設定
 # =========================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "models/gemini-2.5-flash")
@@ -55,8 +56,13 @@ def fetch_news():
 
     for url in RSS_URLS:
         feed = feedparser.parse(url)
+
+        if not feed.entries:
+            continue  # 読み込み失敗対策
+
         for entry in feed.entries[:10]:
             text = (entry.title + " " + entry.get("summary", "")).replace("\n", " ")
+
             articles.append({
                 "title": entry.title,
                 "link": entry.link,
@@ -66,29 +72,26 @@ def fetch_news():
     return articles
 
 # =========================
-# 超軽量類似度（文字一致）
+# 超軽量類似度
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
         return 0, []
 
     input_words = set(input_text.lower().split())
-
     scores = []
 
     for a in articles:
         article_words = set(a["text"].lower().split())
-
         common = input_words & article_words
         score = len(common) / max(len(input_words), 1)
-
         scores.append(score)
 
     max_sim = max(scores) if scores else 0
 
     top_articles = []
     for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True):
-        if scores[i] > 0.1:
+        if scores[i] > 0.05:  # ← 少し緩めた
             top_articles.append({
                 "title": articles[i]["title"],
                 "link": articles[i]["link"],
@@ -98,7 +101,7 @@ def calc_similarity(input_text, articles):
     return max_sim * 100, top_articles[:3]
 
 # =========================
-# AI判定（軽量化）
+# AI判定（安定版）
 # =========================
 def get_ai_score_with_context(text, articles):
     if not model:
@@ -119,29 +122,29 @@ def get_ai_score_with_context(text, articles):
 文章:
 {text}
 
-ScoreとReasonのみ簡潔に答えてください。
+必ずこの形式で答えてください：
+Score: 数値
+Reason: 理由
 """
 
         response = model.generate_content(prompt)
+
+        if not response or not response.text:
+            return 0, "AIレスポンスなし"
+
         content = response.text
 
-        score = 0
-        reason = "解析失敗"
+        # 数値抽出（最強安定）
+        match = re.search(r'(\d{1,3})', content)
+        score = float(match.group(1)) if match else 0
 
-        for line in content.split("\n"):
-            if "Score" in line:
-                try:
-                    score = float(line.split(":")[1].strip())
-                except:
-                    pass
+        if score > 100:
+            score = 100
 
-        if "Reason" in content:
-            reason = content.split("Reason:", 1)[1].strip()
-
-        return score, reason
+        return score, content.strip()
 
     except Exception as e:
-        return 0, str(e)
+        return 0, f"AIエラー: {str(e)}"
 
 # =========================
 # 総合判定
