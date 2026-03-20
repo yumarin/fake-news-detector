@@ -95,9 +95,11 @@ button:hover {
   text-decoration: underline;
 }
 
-/* 分析テキスト */
-.analysis {
-  margin-top: 15px;
-  line-height: 1.6;
-  white-space: pre-wrap;
+/* 分析　*/
+.analysis-box {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 5px;
+    color: red;
+    font-weight: bold;
 }
