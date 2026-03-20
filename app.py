@@ -4,11 +4,7 @@ import os
 import google.generativeai as genai
 import feedparser
 
-# ★ 日本語対応
-from janome.tokenizer import Tokenizer
-
 app = Flask(__name__)
-t = Tokenizer()
 
 # =========================
 # RSS
@@ -40,13 +36,16 @@ def init_db():
 init_db()
 
 # =========================
-# Gemini設定
+# Gemini設定（1回だけ）
 # =========================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "models/gemini-2.5-flash")
 
+model = None
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(MODEL_NAME)
 
 # =========================
 # RSS取得
@@ -67,21 +66,21 @@ def fetch_news():
     return articles
 
 # =========================
-# 軽量類似度（sklearnなし）
+# 超軽量類似度（文字一致）
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
         return 0, []
 
-    input_tokens = set(token.surface for token in t.tokenize(input_text))
+    input_words = set(input_text.lower().split())
 
     scores = []
 
     for a in articles:
-        article_tokens = set(token.surface for token in t.tokenize(a["text"]))
+        article_words = set(a["text"].lower().split())
 
-        common = input_tokens & article_tokens
-        score = len(common) / max(len(input_tokens), 1)
+        common = input_words & article_words
+        score = len(common) / max(len(input_words), 1)
 
         scores.append(score)
 
@@ -99,46 +98,28 @@ def calc_similarity(input_text, articles):
     return max_sim * 100, top_articles[:3]
 
 # =========================
-# AI判定
+# AI判定（軽量化）
 # =========================
 def get_ai_score_with_context(text, articles):
-    if not GEMINI_API_KEY:
+    if not model:
         return 0, "APIキー未設定"
 
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
+        articles_text = "\n".join([
+            f"{a['title']} ({a['score']}%)"
+            for a in articles
+        ]) if articles else "なし"
 
-        if articles:
-            articles_text = "\n---\n".join([
-                f"{a['title']} (一致度:{a['score']}%)"
-                for a in articles
-            ])
-
-            prompt = f"""
+        prompt = f"""
 以下の文章の信頼性を100点満点で評価してください。
 
-【参考ニュース】
+参考ニュース:
 {articles_text}
 
-【評価対象】
+文章:
 {text}
 
-形式：
-Score: 数値
-Reason: 理由
-"""
-        else:
-            prompt = f"""
-以下の文章の信頼性を評価してください。
-
-※参考ニュースなし
-
-【評価対象】
-{text}
-
-形式：
-Score: 数値
-Reason: 理由
+ScoreとReasonのみ簡潔に答えてください。
 """
 
         response = model.generate_content(prompt)
@@ -148,13 +129,13 @@ Reason: 理由
         reason = "解析失敗"
 
         for line in content.split("\n"):
-            if "Score:" in line:
+            if "Score" in line:
                 try:
                     score = float(line.split(":")[1].strip())
                 except:
                     pass
 
-        if "Reason:" in content:
+        if "Reason" in content:
             reason = content.split("Reason:", 1)[1].strip()
 
         return score, reason
@@ -169,16 +150,9 @@ def final_judgement(text):
     articles = fetch_news()
 
     sim_score, top_articles = calc_similarity(text, articles)
-
-    if not top_articles:
-        sim_score = 0
-
     ai_score, analysis = get_ai_score_with_context(text, top_articles)
 
-    if top_articles:
-        final_score = (ai_score * 0.7) + (sim_score * 0.3)
-    else:
-        final_score = ai_score
+    final_score = (ai_score * 0.7) + (sim_score * 0.3) if top_articles else ai_score
 
     return {
         "score": round(final_score, 1),
@@ -227,12 +201,7 @@ def index():
 
     conn.close()
 
-    return render_template(
-        "index.html",
-        result=result,
-        history=history,
-        input_text=input_text
-    )
+    return render_template("index.html", result=result, history=history, input_text=input_text)
 
 # =========================
 # 起動
