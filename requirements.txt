@@ -9,3 +9,4 @@ grpcio==1.62.2
 protobuf==4.25.3
 
 setuptools>=70.0.0
+gunicorn==21.2.0
