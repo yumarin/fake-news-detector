@@ -4,17 +4,26 @@ import os
 import google.generativeai as genai
 import feedparser
 import re
+import time
 
 app = Flask(__name__)
 
 # =========================
-# RSS
+# RSS（増やしてOK）
 # =========================
 RSS_URLS = [
     "https://www3.nhk.or.jp/rss/news/cat0.xml",
     "https://news.yahoo.co.jp/rss/topics/top-picks.xml",
     "http://feeds.bbci.co.uk/news/rss.xml"
 ]
+
+# キャッシュ（超重要）
+news_cache = {
+    "data": [],
+    "last_fetch": 0
+}
+
+CACHE_TTL = 300  # 5分
 
 # =========================
 # DB初期化
@@ -43,24 +52,32 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "models/gemini-2.5-flash")
 
 model = None
-
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(MODEL_NAME)
 
 # =========================
-# RSS取得
+# RSS取得（キャッシュ付き）
 # =========================
 def fetch_news():
+    now = time.time()
+
+    # キャッシュ使う
+    if now - news_cache["last_fetch"] < CACHE_TTL:
+        return news_cache["data"]
+
     articles = []
 
     for url in RSS_URLS:
-        feed = feedparser.parse(url)
+        try:
+            feed = feedparser.parse(url)
+        except:
+            continue
 
         if not feed.entries:
             continue
 
-        for entry in feed.entries[:10]:
+        for entry in feed.entries[:5]:  # ←軽量化（10→5）
             text = (entry.title + " " + entry.get("summary", "")).replace("\n", " ")
 
             articles.append({
@@ -69,10 +86,14 @@ def fetch_news():
                 "text": text
             })
 
+    # キャッシュ保存
+    news_cache["data"] = articles
+    news_cache["last_fetch"] = now
+
     return articles
 
 # =========================
-# 類似度
+# 類似度（軽量版）
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
@@ -83,29 +104,29 @@ def calc_similarity(input_text, articles):
 
     for a in articles:
         article_words = set(a["text"].lower().split())
-        common = input_words & article_words
-        score = len(common) / max(len(input_words), 1)
+        score = len(input_words & article_words) / max(len(input_words), 1)
         scores.append(score)
 
     max_sim = max(scores) if scores else 0
 
-    top_articles = []
-    for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True):
-        if scores[i] > 0.05:
-            top_articles.append({
-                "title": articles[i]["title"],
-                "link": articles[i]["link"],
-                "score": round(scores[i] * 100, 1)
-            })
+    top_articles = [
+        {
+            "title": articles[i]["title"],
+            "link": articles[i]["link"],
+            "score": round(scores[i] * 100, 1)
+        }
+        for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        if scores[i] > 0.05
+    ][:3]
 
-    return max_sim * 100, top_articles[:3]
+    return max_sim * 100, top_articles
 
 # =========================
 # AI判定
 # =========================
 def get_ai_score_with_context(text, articles):
     if not model:
-        return 0, "AI未使用（APIキー未設定）"
+        return 0, "AI未使用"
 
     try:
         articles_text = "\n".join([
@@ -122,7 +143,7 @@ def get_ai_score_with_context(text, articles):
 文章:
 {text}
 
-必ずこの形式で答えてください：
+形式:
 Score: 数値
 Reason: 理由
 """
@@ -136,9 +157,7 @@ Reason: 理由
 
         match = re.search(r'(\d{1,3})', content)
         score = float(match.group(1)) if match else 0
-
-        if score > 100:
-            score = 100
+        score = min(score, 100)
 
         return score, content.strip()
 
@@ -184,7 +203,12 @@ def index():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT text, final_score, created_at FROM judgments ORDER BY id DESC LIMIT 5")
+    cursor.execute("""
+        SELECT text, final_score, created_at
+        FROM judgments
+        ORDER BY id DESC
+        LIMIT 5
+    """)
     history = cursor.fetchall()
 
     if request.method == "POST":
@@ -206,8 +230,7 @@ def index():
     return render_template("index.html", result=result, history=history, input_text=input_text)
 
 # =========================
-# 起動
+# 起動（Render対応）
 # =========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
