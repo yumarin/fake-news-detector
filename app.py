@@ -58,7 +58,7 @@ def fetch_news():
         feed = feedparser.parse(url)
 
         if not feed.entries:
-            continue  # 読み込み失敗対策
+            continue
 
         for entry in feed.entries[:10]:
             text = (entry.title + " " + entry.get("summary", "")).replace("\n", " ")
@@ -72,7 +72,7 @@ def fetch_news():
     return articles
 
 # =========================
-# 超軽量類似度
+# 類似度
 # =========================
 def calc_similarity(input_text, articles):
     if not articles:
@@ -91,7 +91,7 @@ def calc_similarity(input_text, articles):
 
     top_articles = []
     for i in sorted(range(len(scores)), key=lambda i: scores[i], reverse=True):
-        if scores[i] > 0.05:  # ← 少し緩めた
+        if scores[i] > 0.05:
             top_articles.append({
                 "title": articles[i]["title"],
                 "link": articles[i]["link"],
@@ -101,11 +101,11 @@ def calc_similarity(input_text, articles):
     return max_sim * 100, top_articles[:3]
 
 # =========================
-# AI判定（安定版）
+# AI判定
 # =========================
 def get_ai_score_with_context(text, articles):
     if not model:
-        return 0, "APIキー未設定"
+        return 0, "AI未使用（APIキー未設定）"
 
     try:
         articles_text = "\n".join([
@@ -134,7 +134,6 @@ Reason: 理由
 
         content = response.text
 
-        # 数値抽出（最強安定）
         match = re.search(r'(\d{1,3})', content)
         score = float(match.group(1)) if match else 0
 
@@ -210,5 +209,5 @@ def index():
 # 起動
 # =========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
